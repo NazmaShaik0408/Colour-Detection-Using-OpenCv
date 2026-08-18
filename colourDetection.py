@@ -1,71 +1,132 @@
-class Node:
-    def __init__(self, data):
-        self.data=data
-        self.next=None
-class Singly_linked_list:
-    def __init__(self):
-        self.head=None
+import cv2
+import numpy as np
 
-    def add_at_front(self,data):
-        if self.head==None:
-            self.head=Node(data)
-        else:
-            newnode=Node(data)
-            newnode.next=self.head
-            self.head=newnode
+# Open webcam
+cap = cv2.VideoCapture(0)
 
-    def add_at_middle(self,data,pos):
-        if pos<0:
-            return
-        if self.head==None:
-            self.head=Node(data)
-        else:
-            safe=self.head
-            while pos-1>0:
-                safe=safe.next
-                pos-=1
-            newnode=Node(data)
-            newnode.next=safe.next
-            safe.next=newnode
-        
-    def add_at_last(self,data):
-        if self.head==None:
-            self.head=Node(data)
-        else:
-            safe=self.head
-            while safe.next!=None:
-                safe=safe.next
-            safe.next=Node(data)
+while True:
 
-    def display(self):
-        safe=self.head
-        while safe!=None:
-            print(safe.data,end='->')
-            safe=safe.next
-        print("None")
+    # Capture frame
+    ret, frame = cap.read()
 
-    def length_iteration(self):
-        current=self.head
-        count=0
-        while current!=None:
-            current=current.next
-            count+=1
-        return count
-    
-    def length_recursion(self):
-        return self.__length_recursion_helper(self.head)
-    
-    def __length_recursion_helper(self,node):
-        if node==None:
-            return 0
-        return 1+self.__length_recursion_helper(node.next)
+    if not ret:
+        print("Could not access webcam")
+        break
 
-sll=Singly_linked_list()
-sll.add_at_front(19)
-sll.add_at_front(27)
-sll.add_at_last(32)
-sll.add_at_last(52)
-sll.add_at_middle(48,2)
-sll.add_at_middle(76,3)
-sll.display()
-print(sll.length_recursion())
+    # Convert BGR to HSV
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # --------------------------------------------------
+    # Define HSV ranges for different colors
+    # --------------------------------------------------
+
+    colors = {
+
+        "Red": [
+            (np.array([0, 100, 100]), np.array([10, 255, 255])),
+            (np.array([170, 100, 100]), np.array([180, 255, 255]))
+        ],
+
+        "Green": [
+            (np.array([35, 50, 50]), np.array([85, 255, 255]))
+        ],
+
+        "Blue": [
+            (np.array([90, 50, 50]), np.array([130, 255, 255]))
+        ],
+
+        "Sky Blue": [
+            (np.array([80, 50, 50]), np.array([100, 255, 255]))
+        ],
+
+        "Pink": [
+            (np.array([140, 50, 50]), np.array([175, 255, 255]))
+        ],
+
+        "White": [
+            (np.array([0, 0, 180]), np.array([180, 60, 255]))
+        ]
+    }
+
+    # --------------------------------------------------
+    # Detect each color
+    # --------------------------------------------------
+
+    for color_name, ranges in colors.items():
+
+        # Create empty mask
+        mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+
+        # Create mask for each HSV range
+        for lower, upper in ranges:
+            color_mask = cv2.inRange(hsv, lower, upper)
+            mask = cv2.bitwise_or(mask, color_mask)
+
+        # Remove small noise
+        kernel = np.ones((5, 5), np.uint8)
+
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_OPEN,
+            kernel
+        )
+
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_CLOSE,
+            kernel
+        )
+
+        # Find contours
+        contours, _ = cv2.findContours(
+            mask,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        # Process detected objects
+        for contour in contours:
+
+            # Calculate contour area
+            area = cv2.contourArea(contour)
+
+            # Ignore very small objects/noise
+            if area < 500:
+                continue
+
+            # Get bounding rectangle
+            x, y, w, h = cv2.boundingRect(contour)
+
+            # Draw bounding box
+            cv2.rectangle(
+                frame,
+                (x, y),
+                (x + w, y + h),
+                (0, 255, 0),
+                2
+            )
+
+            # Display color name
+            cv2.putText(
+                frame,
+                color_name,
+                (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (0, 255, 0),
+                2
+            )
+
+    # Display webcam frame
+    cv2.imshow("Real-Time Color Detection", frame)
+
+    # Press Q to exit
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+
+# Release webcam
+cap.release()
+
+# Close all OpenCV windows
+cv2.destroyAllWindows()
